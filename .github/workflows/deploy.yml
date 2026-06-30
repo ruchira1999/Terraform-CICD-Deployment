@@ -1,0 +1,87 @@
+name: Deploy Infra on PR Merge
+
+on:
+  pull_request:
+    branches:
+      - main
+    types:
+      - closed
+
+jobs:
+  deploy:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+
+    steps:
+
+      # Checkout code
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      # Install required tools (Terraform)
+      - name: Install Terraform & Tools
+        run: |
+          if command -v terraform &> /dev/null
+          then
+            echo "Terraform already installed"
+            terraform -version
+          else
+            echo "Installing Terraform..."
+            sudo apt-get update
+            sudo apt-get install -y wget unzip jq
+            wget https://releases.hashicorp.com/terraform/1.5.0/terraform_1.5.0_linux_amd64.zip
+            unzip terraform_1.5.0_linux_amd64.zip
+            sudo mv terraform /usr/local/bin/
+            terraform -version
+          fi
+
+      # Initial AWS auth (from GitHub Secrets)
+      - name: Configure AWS (Initial Access)
+        run: |
+          aws configure set aws_access_key_id ${{ secrets.AWS_ACCESS_KEY }}
+          aws configure set aws_secret_access_key ${{ secrets.AWS_SECRET_KEY }}
+          aws configure set region ap-south-1
+
+      # Fetch real credentials from AWS Secrets Manager
+      - name: Fetch Secrets from AWS
+        run: |
+          aws secretsmanager get-secret-value \
+            --secret-id dev/cicd \
+            --query SecretString \
+            --output text > secret.json
+
+          AWS_ACCESS_KEY=$(jq -r '.AWS_ACCESS_KEY' secret.json)
+          AWS_SECRET_KEY=$(jq -r '.AWS_SECRET_KEY' secret.json)
+
+          # Set environment variables
+          echo "AWS_ACCESS_KEY=$AWS_ACCESS_KEY" >> $GITHUB_ENV
+          echo "AWS_SECRET_KEY=$AWS_SECRET_KEY" >> $GITHUB_ENV
+
+      # Configure AWS using fetched secrets
+      - name: Configure AWS (From Secrets Manager)
+        run: |
+          aws configure set aws_access_key_id $AWS_ACCESS_KEY
+          aws configure set aws_secret_access_key $AWS_SECRET_KEY
+          aws configure set region ap-south-1
+
+      # Terraform deployment
+      - name: Terraform Init
+        working-directory: terraform
+        run: terraform init
+
+      - name: Terraform Apply
+        working-directory: terraform
+        run: terraform apply -auto-approve
+
+      # CloudFormation deployment
+      - name: Deploy CloudFormation
+        run: |
+          aws cloudformation deploy \
+            --template-file cloudformation/ec2.yaml \
+            --stack-name ec2-cfn-stack \
+            --parameter-overrides \
+              InstanceType=t3.micro \
+              ImageId=ami-0bc7aabcf58d1e02a \
+              SecurityGroupIds=sg-0c1957427952aa8eb \
+              InstanceName=cfn-ec2-instance \
+            --capabilities CAPABILITY_NAMED_IAM
