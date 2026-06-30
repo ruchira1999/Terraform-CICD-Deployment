@@ -67,9 +67,23 @@ jobs:
       # Terraform deployment
       - name: Terraform Init
         run: terraform init
+    
+       # Terraform validation
+      - name: Terraform Validate
+        run: terraform validate
+
+        # Terraform plan
+      - name: Terraform Plan
+        run: terraform plan -out=tfplan
 
       - name: Terraform Apply
         run: terraform apply -auto-approve
+
+      # validate cloudformation template
+      - name: Validate CloudFormation Template
+        run: |
+            aws cloudformation validate-template \
+                --template-body file://cloudformation/ec2.yaml
 
       # CloudFormation deployment
       - name: Deploy CloudFormation
