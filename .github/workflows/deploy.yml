@@ -67,9 +67,23 @@ jobs:
       # Terraform deployment
       - name: Terraform Init
         run: terraform init
+    
+       # Terraform validation
+      - name: Terraform Validate
+        run: terraform validate
+
+        # Terraform plan
+      - name: Terraform Plan
+        run: terraform plan -out=tfplan
 
       - name: Terraform Apply
         run: terraform apply -auto-approve
+
+      # validate cloudformation template
+      - name: Validate CloudFormation Template
+        run: |
+            aws cloudformation validate-template \
+                --template-body file://cloudformation/ec2.yaml
 
       # CloudFormation deployment
       - name: Deploy CloudFormation
@@ -81,5 +95,5 @@ jobs:
               InstanceType=t3.micro \
               ImageId=ami-0bc7aabcf58d1e02a \
               SecurityGroupIds=sg-0c1957427952aa8eb \
-              InstanceName=cfn-ec2-instance \
+              InstanceName=cloudformation-ec2 \
             --capabilities CAPABILITY_NAMED_IAM
