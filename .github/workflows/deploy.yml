@@ -69,7 +69,6 @@ jobs:
         run: terraform init
 
       - name: Terraform Apply
-        working-directory: terraform
         run: terraform apply -auto-approve
 
       # CloudFormation deployment
